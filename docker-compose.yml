@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: smartinbox_db
+    environment:
+      POSTGRES_USER: smartinbox_user
+      POSTGRES_PASSWORD: smartinbox_password
+      POSTGRES_DB: smartinbox_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartinbox_user -d smartinbox_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartinbox_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: smartinbox_backend
+    environment:
+      - DATABASE_URL=postgresql://smartinbox_user:smartinbox_password@db:5432/smartinbox_db
+      - REDIS_URL=redis://redis:6379/0
+      - SPEECH_TO_TEXT_PROVIDER=local
+      - OCR_PROVIDER=local
+      - EMBEDDING_PROVIDER=local
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: smartinbox_worker
+    environment:
+      - DATABASE_URL=postgresql://smartinbox_user:smartinbox_password@db:5432/smartinbox_db
+      - REDIS_URL=redis://redis:6379/0
+      - SPEECH_TO_TEXT_PROVIDER=local
+      - OCR_PROVIDER=local
+      - EMBEDDING_PROVIDER=local
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: celery -A src.worker.celery_app worker --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:

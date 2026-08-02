@@ -1,0 +1,26 @@
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local database files
+*.db
+*.sqlite
+
+# Environment variables & keys
+.env
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE/Editor configs
+.vscode/
+.idea/
+
+# System files
+Thumbs.db
+Desktop.ini
