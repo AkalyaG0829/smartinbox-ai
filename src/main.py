@@ -7,12 +7,13 @@ from typing import Dict, Any
 from src.config.settings import settings
 from src.database.session import engine, Base, get_db
 from src.infrastructure.providers.mock_providers import (
-    MockSpeechToTextProvider, 
-    MockOCRProvider, 
+    MockSpeechToTextProvider,
+    MockOCRProvider,
     MockEmbeddingProvider,
     LocalPromptInjectionShield
 )
 from src.application.pipeline import MessageRoutingPipeline
+from src.application.schemas import MessageProcessingRequest, MessageProcessingResult
 
 # LIFESPAN - Create database schemas upon initialization
 @asynccontextmanager
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SmartInbox AI Backend Monolith",
     description="Intelligent context-aware message notification router.",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -57,25 +58,23 @@ def get_health(db: Session = Depends(get_db)):
             "embedding_provider": settings.EMBEDDING_PROVIDER
         }
     }
-    
+
     try:
-        # Simple query verification
         db.execute(Base.metadata.tables["users"].select().limit(1))
         health_status["database"] = "healthy"
     except Exception as e:
-        # Check if database is connection active but empty
         try:
             db.execute(engine.dialect.denier_query if hasattr(engine.dialect, "denier_query") else "SELECT 1")
             health_status["database"] = "healthy"
         except Exception:
             health_status["status"] = "unhealthy"
-            
+
     if health_status["status"] == "unhealthy":
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=health_status
         )
-        
+
     return health_status
 
 @app.post("/api/v1/messages/route", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
@@ -83,7 +82,6 @@ async def route_message(payload: Dict[str, Any], db: Session = Depends(get_db)):
     """
     Ingests an incoming message and determines the routing action.
     """
-    # Initialize the pipeline processor
     pipeline = MessageRoutingPipeline(
         db=db,
         stt_provider=stt_prov,
@@ -91,7 +89,7 @@ async def route_message(payload: Dict[str, Any], db: Session = Depends(get_db)):
         embedding_provider=emb_prov,
         injection_shield=inj_shld
     )
-    
+
     try:
         decision = await pipeline.route_incoming_message(payload)
         return decision
@@ -99,4 +97,27 @@ async def route_message(payload: Dict[str, Any], db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Routing execution failed: {str(e)}"
+        )
+
+@app.post("/api/v1/messages/process", response_model=MessageProcessingResult, status_code=status.HTTP_200_OK)
+async def process_message(payload: MessageProcessingRequest, db: Session = Depends(get_db)):
+    """
+    Ingests an incoming message and executes modular Phase 2 processing,
+    returning structured safety, urgency, personalization, and classification results.
+    """
+    pipeline = MessageRoutingPipeline(
+        db=db,
+        stt_provider=stt_prov,
+        ocr_provider=ocr_prov,
+        embedding_provider=emb_prov,
+        injection_shield=inj_shld
+    )
+
+    try:
+        result = await pipeline.process_incoming_message(payload)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message processing failed: {str(e)}"
         )
