@@ -1,6 +1,6 @@
-# SmartInbox AI — Phase 1 Local Foundation
+# SmartInbox AI — Backend Foundation
 
-This is the production-grade, modular monolith implementation of **SmartInbox AI** (Phase 1). It defines the backend layout, SQLAlchemy models, abstract provider interfaces, and regression tests verifying 100% parity against the HackerRank prototype results.
+This is the production-grade, modular monolith implementation of **SmartInbox AI**. It defines the backend layout, SQLAlchemy models, abstract provider interfaces, and regression tests verifying 100% parity against the HackerRank prototype results.
 
 ---
 
@@ -36,7 +36,8 @@ D:\Projects\smartinbox-ai\
 └── tests/
     ├── conftest.py              # SQLite mock fixtures and HTTP Client configurations
     ├── unit/
-    │   └── test_api.py          # Endpoint checks (/health and message routing validations)
+    │   ├── test_api.py          # Endpoint checks (/health and message routing validations)
+    │   └── test_async.py        # Async endpoints checks (task enqueuing and state status queries)
     └── regression/
         ├── dataset/             # Parity verification datasets (copied from prototype)
         └── test_parity.py       # Core routing engine parity regression verification (110 messages)
@@ -56,7 +57,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Run the Test Suite
-Validate the entire backend routing pipeline and confirm 100% regression parity against the prototype outputs:
+Validate the entire backend routing pipeline, modular components, and async state task queries:
 ```bash
 python -m pytest
 ```
@@ -76,19 +77,33 @@ docker compose ps
 
 # Inspect logs from the backend server
 docker compose logs backend -f
+
+# Inspect logs from the Celery worker
+docker compose logs worker -f
 ```
+
+---
+
+## Environment Variables
+
+Configure these settings inside your `.env` file for local development:
+*   `DATABASE_URL`: Connection string for PostgreSQL (e.g. `postgresql://smartinbox_user:smartinbox_password@localhost:5432/smartinbox_db`).
+*   `REDIS_URL`: Connection string for Redis broker & backend cache (e.g. `redis://localhost:6379/0`).
+*   `SPEECH_TO_TEXT_PROVIDER`: Mode settings (`local` or `cloud`).
+*   `OCR_PROVIDER`: Mode settings (`local` or `cloud`).
+*   `EMBEDDING_PROVIDER`: Mode settings (`local` or `cloud`).
 
 ---
 
 ## API Boundaries
 
 ### System Health
-- **URL**: `GET /health`
-- **Output**: Returns details on database connectivity, active environment status, and provider setups.
+*   **URL**: `GET /health`
+*   **Output**: Returns details on database connectivity, active environment status, and provider setups.
 
-### Ingest Message Route
-- **URL**: `POST /api/v1/messages/route`
-- **Body**:
+### Ingest Message Route (Legacy)
+*   **URL**: `POST /api/v1/messages/route`
+*   **Body**:
   ```json
   {
     "message_id": "test_msg_001",
@@ -101,7 +116,7 @@ docker compose logs backend -f
     "forwarded_count": 0
   }
   ```
-- **Response**:
+*   **Response**:
   ```json
   {
     "action": "digest",
@@ -109,5 +124,62 @@ docker compose logs backend -f
     "reason": "Low-priority message or general communication, suitable for later reading.",
     "confidence": 0.82,
     "evidence_message_ids": "none"
+  }
+  ```
+
+### Synchronous Detailed Process Endpoint
+*   **URL**: `POST /api/v1/messages/process`
+*   **Body**: *(Same JSON payload as /route)*
+*   **Response**: Returns the full structured `MessageProcessingResult` carrying nested detailed sub-results (`safety_result`, `urgency_result`, `personalization_result`, `evidence_message_ids`, and `processing_metadata`).
+
+### Asynchronous Process Endpoint
+*   **URL**: `POST /api/v1/messages/process-async`
+*   **Body**: *(Same JSON payload as /route)*
+*   **Response**:
+  ```json
+  {
+    "task_id": "8c6f62f3-c598-4c8d-b0ad-eaec99fb58d2",
+    "status": "PENDING"
+  }
+  ```
+
+### Get Task Status
+*   **URL**: `GET /api/v1/messages/tasks/{task_id}`
+*   **Response (Pending)**:
+  ```json
+  {
+    "task_id": "8c6f62f3-c598-4c8d-b0ad-eaec99fb58d2",
+    "status": "PENDING"
+  }
+  ```
+*   **Response (Success)**:
+  ```json
+  {
+    "task_id": "8c6f62f3-c598-4c8d-b0ad-eaec99fb58d2",
+    "status": "SUCCESS",
+    "result": {
+      "message_id": "test_msg_001",
+      "message_type": "greeting",
+      "action": "digest",
+      "confidence": 0.82,
+      "reason": "Low-priority message or general communication, suitable for later reading.",
+      "safety_result": { "detected": false, "risk_level": "low", "matched_indicators": [], "sanitized_text": "Good morning!" },
+      "urgency_result": { "is_urgent": false, "urgency_score": 0.0, "urgency_reasons": [] },
+      "personalization_result": { "priority_score": 2.0, "trust_score": 3.5, "relationship_score": 2.0, "reasons": [] },
+      "evidence_message_ids": "none",
+      "processing_metadata": {
+        "processed_at": "2026-08-02T16:34:00.000000",
+        "preprocessed_text": "Good morning!",
+        "engine_version": "2.0.0-modular"
+      }
+    }
+  }
+  ```
+*   **Response (Failure)**:
+  ```json
+  {
+    "task_id": "8c6f62f3-c598-4c8d-b0ad-eaec99fb58d2",
+    "status": "FAILURE",
+    "error": "Task execution failed during asynchronous processing"
   }
   ```

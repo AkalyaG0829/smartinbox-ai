@@ -3,6 +3,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from typing import Dict, Any
+from celery.result import AsyncResult
 
 from src.config.settings import settings
 from src.database.session import engine, Base, get_db
@@ -14,6 +15,7 @@ from src.infrastructure.providers.mock_providers import (
 )
 from src.application.pipeline import MessageRoutingPipeline
 from src.application.schemas import MessageProcessingRequest, MessageProcessingResult
+from src.worker import celery_app, process_message_async
 
 # LIFESPAN - Create database schemas upon initialization
 @asynccontextmanager
@@ -33,7 +35,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SmartInbox AI Backend Monolith",
     description="Intelligent context-aware message notification router.",
-    version="2.0.0",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -120,4 +122,53 @@ async def process_message(payload: MessageProcessingRequest, db: Session = Depen
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Message processing failed: {str(e)}"
+        )
+
+@app.post("/api/v1/messages/process-async", status_code=status.HTTP_202_ACCEPTED)
+async def process_message_async_endpoint(payload: MessageProcessingRequest):
+    """
+    Asynchronously enqueues the message processing request via Celery background tasks.
+    """
+    try:
+        task = process_message_async.delay(payload.model_dump())
+        return {
+            "task_id": task.id,
+            "status": "PENDING"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Task dispatch failed: {str(e)}"
+        )
+
+@app.get("/api/v1/messages/tasks/{task_id}", status_code=status.HTTP_200_OK)
+async def get_task_status(task_id: str):
+    """
+    Checks the execution status of a background message processing task.
+    """
+    try:
+        res = AsyncResult(task_id, app=celery_app)
+        state = res.state
+
+        if state == "SUCCESS":
+            return {
+                "task_id": task_id,
+                "status": "SUCCESS",
+                "result": res.result
+            }
+        elif state == "FAILURE":
+            return {
+                "task_id": task_id,
+                "status": "FAILURE",
+                "error": "Task execution failed during asynchronous processing"
+            }
+        else:
+            return {
+                "task_id": task_id,
+                "status": state
+            }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch task status: {str(e)}"
         )
