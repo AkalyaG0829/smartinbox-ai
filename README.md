@@ -92,6 +92,20 @@ Configure these settings inside your `.env` file for local development:
 *   `SPEECH_TO_TEXT_PROVIDER`: Mode settings (`local` or `cloud`).
 *   `OCR_PROVIDER`: Mode settings (`local` or `cloud`).
 *   `EMBEDDING_PROVIDER`: Mode settings (`local` or `cloud`).
+*   `EMBEDDING_MODEL`: The local SentenceTransformers model used (e.g. `all-MiniLM-L6-v2`).
+
+---
+
+## Real Local Semantic Embeddings
+
+Phase 3 Milestone 2 integrates local semantic text embeddings:
+*   **Model**: `all-MiniLM-L6-v2` (SentenceTransformers).
+*   **Dimensions**: `384` floating-point values.
+*   **Hardware Requirement**: CPU-bound execution (highly optimized lightweight CPU inference).
+*   **Lifecycle**: The provider initializes once per application process (FastAPI server process or Celery task worker process) and caches the model instance in memory.
+*   **Docker Optimization**: The model weights are pre-downloaded and cached during the image build step (`docker compose build`), enabling completely offline, fast runtime startups without fetching models on container start.
+*   **SQLite Compatibility**: During local tests using SQLite, embedding extraction and persistence are naturally bypassed, ensuring that the test suite runs fully offline without needing database pgvector support.
+
 
 ---
 

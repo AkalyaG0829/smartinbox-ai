@@ -39,16 +39,16 @@ def process_message_async(request_data: dict) -> dict:
     from src.infrastructure.providers.mock_providers import (
         MockSpeechToTextProvider,
         MockOCRProvider,
-        MockEmbeddingProvider,
         LocalPromptInjectionShield
     )
+    from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
     import asyncio
 
     db = SessionLocal()
 
     stt_prov = MockSpeechToTextProvider()
     ocr_prov = MockOCRProvider()
-    emb_prov = MockEmbeddingProvider()
+    emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
     inj_shld = LocalPromptInjectionShield()
 
     pipeline = MessageRoutingPipeline(
