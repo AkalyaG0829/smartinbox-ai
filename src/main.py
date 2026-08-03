@@ -30,6 +30,13 @@ async def lifespan(app: FastAPI):
             print(f"Database connection waiting... Retrying. Error: {e}")
             time.sleep(2)
             retries -= 1
+
+    # Eagerly warm up the embedding model during startup
+    try:
+        emb_prov.warmup()
+    except Exception as e:
+        print(f"Eager embedding model warmup failed: {e}")
+
     yield
 
 app = FastAPI(

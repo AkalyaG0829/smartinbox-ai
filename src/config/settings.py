@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     PERSONALIZATION_CACHE_ENABLED: bool = True
     PERSONALIZATION_CACHE_TTL: int = 3600
 
+    EMBEDDING_CACHE_ENABLED: bool = True
+    EMBEDDING_CACHE_TTL: int = 86400
+
     PORT: int = 8000
     ENVIRONMENT: str = "development"
 

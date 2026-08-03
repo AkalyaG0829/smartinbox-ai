@@ -1,5 +1,7 @@
 from celery import Celery
 from src.config.settings import settings
+from sqlalchemy.exc import OperationalError, DBAPIError
+from redis.exceptions import ConnectionError, TimeoutError
 
 # Initialize Celery app
 celery_app = Celery(
@@ -16,6 +18,20 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
+from celery.signals import worker_ready
+
+@worker_ready.connect
+def warm_up_model(sender, **kwargs):
+    """
+    Eagerly loads and warms up the SentenceTransformer model when worker boots.
+    """
+    try:
+        from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
+        emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
+        emb_prov.warmup()
+    except Exception as e:
+        print(f"Celery worker eager warmup failed: {e}")
+
 @celery_app.task(name="tasks.process_media_async")
 def process_media_async(message_id: str, media_type: str, media_url: str):
     """
@@ -28,7 +44,13 @@ def process_media_async(message_id: str, media_type: str, media_url: str):
         "media_type": media_type
     }
 
-@celery_app.task(name="tasks.process_message_async")
+@celery_app.task(
+    name="tasks.process_message_async",
+    autoretry_for=(OperationalError, DBAPIError, ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    max_retries=5
+)
 def process_message_async(request_data: dict) -> dict:
     """
     Background job to execute modular message processing asynchronously.
@@ -69,7 +91,13 @@ def process_message_async(request_data: dict) -> dict:
     finally:
         db.close()
 
-@celery_app.task(name="tasks.recalculate_personalization_stats")
+@celery_app.task(
+    name="tasks.recalculate_personalization_stats",
+    autoretry_for=(OperationalError, DBAPIError, ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    max_retries=5
+)
 def recalculate_personalization_stats(user_id: str, sender_id: str, db=None) -> dict:
     """
     Asynchronously aggregates historical statistics for a user/sender pair,
