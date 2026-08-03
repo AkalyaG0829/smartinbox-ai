@@ -14,7 +14,7 @@ from src.infrastructure.providers.mock_providers import (
 )
 from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
 from src.application.pipeline import MessageRoutingPipeline
-from src.application.schemas import MessageProcessingRequest, MessageProcessingResult
+from src.application.schemas import MessageProcessingRequest, MessageProcessingResult, UserInteractionRequest
 from src.worker import celery_app, process_message_async
 
 # LIFESPAN - Create database schemas upon initialization
@@ -171,4 +171,81 @@ async def get_task_status(task_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch task status: {str(e)}"
+        )
+
+@app.post("/api/v1/interactions", status_code=status.HTTP_201_CREATED)
+async def create_user_interaction(payload: UserInteractionRequest, db: Session = Depends(get_db)):
+    """
+    Ingests user interaction metrics (clicks, replies, dismissals, reports) and persists in DB.
+    """
+    try:
+        from src.infrastructure.models import User, Message, Channel, UserInteraction
+
+        dialect_name = db.bind.dialect.name if (db and db.bind) else "sqlite"
+
+        # Check if user exists, otherwise create a stub user if SQLite
+        user_obj = db.query(User).filter(User.id == payload.user_id).first()
+        if not user_obj:
+            if dialect_name == "sqlite":
+                user_obj = User(id=payload.user_id, email=payload.user_id)
+                db.add(user_obj)
+                db.flush()
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"User {payload.user_id} does not exist"
+                )
+
+        # Check if message exists, otherwise create a stub message if SQLite
+        msg_obj = db.query(Message).filter(Message.id == payload.message_id).first()
+        if not msg_obj:
+            if dialect_name == "sqlite":
+                chan_id = "default_channel"
+                chan_obj = db.query(Channel).filter(Channel.id == chan_id).first()
+                if not chan_obj:
+                    chan_obj = Channel(id=chan_id, name="Default Channel", type="personal", external_id=chan_id)
+                    db.add(chan_obj)
+                    db.flush()
+                msg_obj = Message(id=payload.message_id, channel_id=chan_id, message_text="")
+                db.add(msg_obj)
+                db.flush()
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Message {payload.message_id} does not exist"
+                )
+
+        interaction = UserInteraction(
+            user_id=payload.user_id,
+            message_id=payload.message_id,
+            opened=payload.opened,
+            replied=payload.replied,
+            dismissed=payload.dismissed,
+            reported=payload.reported,
+            reaction_time_seconds=payload.reaction_time_seconds
+        )
+        db.add(interaction)
+        db.commit()
+
+        # Dispatch background Celery task to recalculate user personalization aggregates
+        sender_id_val = msg_obj.sender_id or "default_sender"
+        from src.application.personalization_cache import PersonalizationCache
+        PersonalizationCache.invalidate(payload.user_id, sender_id_val)
+
+        from src.worker import recalculate_personalization_stats
+        recalculate_personalization_stats.delay(payload.user_id, sender_id_val)
+
+        return {
+            "status": "success",
+            "message": "User interaction recorded successfully",
+            "interaction_id": interaction.id
+        }
+    except HTTPException as he:
+        db.rollback()
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record interaction: {str(e)}"
         )

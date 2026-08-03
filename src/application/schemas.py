@@ -13,7 +13,7 @@ class MessageProcessingRequest(BaseModel):
     media_type: Optional[str] = Field("none", description="none, image, or voice")
     media_id: Optional[str] = Field(None, description="Linked media element ID")
     forwarded_count: Optional[int] = Field(0, description="Forward count flag")
-    
+
     # Custom fields for testing overrides
     do_not_disturb_window: Optional[str] = None
     group_muted: Optional[bool] = None
@@ -56,3 +56,12 @@ class MessageProcessingResult(BaseModel):
     personalization_result: PersonalizationResult = Field(..., description="Personalization scoring weights")
     evidence_message_ids: str = Field("none", description="Semicolon separated relevant history message IDs")
     processing_metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata logs (timestamps, version)")
+
+class UserInteractionRequest(BaseModel):
+    user_id: str = Field(..., description="Unique user identifier")
+    message_id: str = Field(..., description="Unique message identifier")
+    opened: Optional[bool] = Field(False, description="Whether the message was opened")
+    replied: Optional[bool] = Field(False, description="Whether the message was replied to")
+    dismissed: Optional[bool] = Field(False, description="Whether the notification was dismissed")
+    reported: Optional[bool] = Field(False, description="Whether the message was reported")
+    reaction_time_seconds: Optional[int] = Field(None, description="Reaction time in seconds")

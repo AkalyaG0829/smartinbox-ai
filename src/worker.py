@@ -68,3 +68,27 @@ def process_message_async(request_data: dict) -> dict:
         raise e
     finally:
         db.close()
+
+@celery_app.task(name="tasks.recalculate_personalization_stats")
+def recalculate_personalization_stats(user_id: str, sender_id: str, db=None) -> dict:
+    """
+    Asynchronously aggregates historical statistics for a user/sender pair,
+    preparing the data for caching.
+    """
+    from src.database.session import SessionLocal
+    from src.application.personalization_service import PersonalizationService
+
+    is_external_db = db is not None
+    session = db if is_external_db else SessionLocal()
+    try:
+        print(f"Starting background personalization re-aggregation for user {user_id} and sender {sender_id}")
+        stats = PersonalizationService.get_historical_stats(session, user_id, sender_id)
+        from src.application.personalization_cache import PersonalizationCache
+        PersonalizationCache.set(user_id, sender_id, stats)
+        return stats
+    except Exception as e:
+        print(f"Error recalculating personalization stats: {str(e)}")
+        raise e
+    finally:
+        if not is_external_db:
+            session.close()

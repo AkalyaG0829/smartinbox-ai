@@ -149,6 +149,18 @@ class MessageRoutingPipeline:
             sender_profile['category'] = raw_msg['category']
         if 'historical_stats' in raw_msg:
             historical_stats.update(raw_msg['historical_stats'])
+        elif self.db:
+            sender_id_val = raw_msg.get('sender_user_id') if conv_type != 'business' else raw_msg.get('business_id')
+            if sender_id_val:
+                from src.application.personalization_cache import PersonalizationCache
+                cached_stats = PersonalizationCache.get(user_id, sender_id_val)
+                if cached_stats:
+                    historical_stats.update(cached_stats)
+                else:
+                    from src.application.personalization_service import PersonalizationService
+                    db_stats = PersonalizationService.get_historical_stats(self.db, user_id, sender_id_val)
+                    historical_stats.update(db_stats)
+                    PersonalizationCache.set(user_id, sender_id_val, db_stats)
 
         if not evidence_list:
             ev_field = raw_msg.get('evidence_message_ids')
@@ -216,6 +228,18 @@ class MessageRoutingPipeline:
         }
         if request.historical_stats:
             historical_stats.update(request.historical_stats)
+        elif self.db:
+            sender_id_val = request.sender_user_id if conv_type != 'business' else request.business_id
+            if sender_id_val:
+                from src.application.personalization_cache import PersonalizationCache
+                cached_stats = PersonalizationCache.get(user_id, sender_id_val)
+                if cached_stats:
+                    historical_stats.update(cached_stats)
+                else:
+                    from src.application.personalization_service import PersonalizationService
+                    db_stats = PersonalizationService.get_historical_stats(self.db, user_id, sender_id_val)
+                    historical_stats.update(db_stats)
+                    PersonalizationCache.set(user_id, sender_id_val, db_stats)
 
         evidence_list = []
         if request.evidence_message_ids and request.evidence_message_ids != "none":

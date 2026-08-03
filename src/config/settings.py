@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     SEMANTIC_SIMILARITY_THRESHOLD: float = 0.6
     SEMANTIC_LIMIT: int = 3
 
+    PERSONALIZATION_CACHE_ENABLED: bool = True
+    PERSONALIZATION_CACHE_TTL: int = 3600
+
     PORT: int = 8000
     ENVIRONMENT: str = "development"
 
