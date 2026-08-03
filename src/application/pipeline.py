@@ -17,6 +17,7 @@ from src.domain.personalization import PersonalizationEngine, PersonalizationRes
 from src.domain.confidence import ConfidenceScorer
 from src.domain.action_policy import ActionPolicyEngine
 from src.application.schemas import MessageProcessingRequest, MessageProcessingResult
+from src.domain.evidence import EvidenceRetriever
 
 class MessageRoutingPipeline:
     def __init__(
@@ -425,54 +426,15 @@ class MessageRoutingPipeline:
 
     async def _retrieve_evidence_from_db(self, msg: Dict[str, Any], text_to_search: str) -> List[str]:
         """
-        Retrieves matching historical messages from Postgres using PGVector cosine similarity
-        or exact media links.
+        Retrieves matching historical messages from Postgres using pgvector cosine distance,
+        delegating to the EvidenceRetriever coordinator.
         """
-        if not self.db:
-            return []
-
-        user_id = msg.get('user_id')
-        media_id = msg.get('media_id')
-
-        user_obj = self.db.query(User).filter(User.email == user_id).first()
-        if not user_obj:
-            user_obj = self.db.query(User).filter(User.id == user_id).first()
-        if not user_obj:
-            return []
-
-        user_uuid = user_obj.id
-
-        if media_id:
-            hist_media = self.db.query(Message).join(Channel).join(ChannelMember).filter(
-                ChannelMember.user_id == user_uuid,
-                Message.media_type != 'none',
-                Message.media_url.like(f"%{media_id}%")
-            ).first()
-            if hist_media:
-                return [str(hist_media.id)]
-
-        if text_to_search:
-            vector = await self.embedding_provider.get_embedding(text_to_search)
-            try:
-                sql = text("""
-                    SELECT m.id, m.message_text, (m.embedding_vector <=> :vector::vector) as distance
-                    FROM messages m
-                    JOIN channel_members cm ON m.channel_id = cm.channel_id
-                    WHERE cm.user_id = :user_id AND m.embedding_vector IS NOT NULL
-                    ORDER BY distance ASC
-                    LIMIT 3
-                """)
-                vector_str = "[" + ",".join(map(str, vector)) + "]"
-                res = self.db.execute(sql, {"vector": vector_str, "user_id": user_uuid})
-                candidates = []
-                for row in res:
-                    if row.distance <= 0.6:
-                        candidates.append(str(row.id))
-                return candidates
-            except Exception:
-                pass
-
-        return []
+        return await EvidenceRetriever.retrieve_evidence(
+            db=self.db,
+            msg=msg,
+            text_to_search=text_to_search,
+            embedding_provider=self.embedding_provider
+        )
 
     async def _save_records_to_db(self, msg: Dict[str, Any], text: str, transcript: Optional[str], decision: Dict[str, Any]):
         """

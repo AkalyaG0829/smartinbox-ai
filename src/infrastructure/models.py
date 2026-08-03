@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, String, Integer, Boolean, Time, ForeignKey, DateTime, Numeric
+from sqlalchemy import Column, String, Integer, Boolean, Time, ForeignKey, DateTime, Numeric, Index
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from src.database.session import Base
@@ -74,6 +74,14 @@ class Message(Base):
     sender = relationship("Contact", back_populates="messages")
     routing_decisions = relationship("RoutingDecision", back_populates="message", cascade="all, delete-orphan")
     interactions = relationship("UserInteraction", back_populates="message", cascade="all, delete-orphan")
+
+# PostgreSQL-only HNSW cosine index for Message.embedding_vector using vector_cosine_ops
+Index(
+    'messages_embedding_vector_hnsw_idx',
+    Message.embedding_vector,
+    postgresql_using='hnsw',
+    postgresql_ops={'embedding_vector': 'vector_cosine_ops'}
+)
 
 class RoutingDecision(Base):
     __tablename__ = "routing_decisions"

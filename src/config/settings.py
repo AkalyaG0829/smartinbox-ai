@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = "mock-key"
     GEMINI_API_KEY: str = "mock-key"
 
+    SEMANTIC_SIMILARITY_THRESHOLD: float = 0.6
+    SEMANTIC_LIMIT: int = 3
+
     PORT: int = 8000
     ENVIRONMENT: str = "development"
 
