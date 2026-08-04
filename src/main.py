@@ -103,6 +103,8 @@ app.add_middleware(CorrelationIdMiddleware)
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
+import src.application.metrics  # Initialize custom business metrics
+
 # Providers initialization
 stt_prov = MockSpeechToTextProvider()
 ocr_prov = MockOCRProvider()

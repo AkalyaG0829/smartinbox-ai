@@ -247,7 +247,15 @@ class MessageRoutingPipeline:
 
         if self.db:
             if not evidence_list:
-                evidence_list = await self._retrieve_evidence_from_db(raw_msg, analyzable_text)
+                import time
+                try:
+                    from src.application.metrics import EMBEDDING_DURATION
+                    start_time = time.time()
+                    evidence_list = await self._retrieve_evidence_from_db(raw_msg, analyzable_text)
+                    duration = time.time() - start_time
+                    EMBEDDING_DURATION.observe(duration)
+                except Exception:
+                    evidence_list = await self._retrieve_evidence_from_db(raw_msg, analyzable_text)
 
             user_obj = self.db.query(User).filter(User.email == user_id).first()
             if not user_obj:
@@ -427,6 +435,16 @@ class MessageRoutingPipeline:
             'confidence': conf_res['score'],
             'evidence_message_ids': ";".join(evidence_list) if evidence_list else "none"
         }
+
+        try:
+            from src.application.metrics import ROUTING_DECISIONS, CONFIDENCE_BANDS
+            ROUTING_DECISIONS.labels(action=decision['action']).inc()
+
+            conf_score = float(decision['confidence'])
+            band = "high" if conf_score >= 0.8 else ("medium" if conf_score >= 0.5 else "low")
+            CONFIDENCE_BANDS.labels(band=band).inc()
+        except Exception:
+            pass
 
         if self.db:
             await self._save_records_to_db(raw_msg, analyzable_text, media_transcript, decision)
