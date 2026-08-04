@@ -271,3 +271,74 @@ async def get_routing_alignment_analytics(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch alignment analytics: {str(e)}"
         )
+
+@app.get("/api/v1/tasks/dlq", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
+async def get_failed_tasks_dlq(db: Session = Depends(get_db)):
+    """
+    Retrieves a list of permanently failed tasks from the Dead Letter Queue.
+    """
+    try:
+        from src.infrastructure.models import FailedTaskLog
+        failed_logs = db.query(FailedTaskLog).filter(FailedTaskLog.is_replayed == False).all()
+        return {
+            "status": "success",
+            "failed_tasks": [
+                {
+                    "id": log.id,
+                    "task_id": log.task_id,
+                    "task_name": log.task_name,
+                    "failed_at": log.failed_at.isoformat() if log.failed_at else None,
+                    "exception": log.exception_details,
+                    "original_payload": log.original_payload
+                } for log in failed_logs
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch DLQ: {str(e)}"
+        )
+
+@app.post("/api/v1/tasks/dlq/{log_id}/replay", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
+async def replay_failed_task(log_id: int, db: Session = Depends(get_db)):
+    """
+    Replays a specific failed task from the DLQ by re-enqueueing it to Celery.
+    """
+    try:
+        import json
+        from src.infrastructure.models import FailedTaskLog
+        failed_log = db.query(FailedTaskLog).filter(FailedTaskLog.id == log_id).first()
+        if not failed_log:
+            raise HTTPException(status_code=404, detail="Failed task log not found")
+        if failed_log.is_replayed:
+            raise HTTPException(status_code=400, detail="Task has already been replayed")
+        payload = {}
+        if failed_log.original_payload:
+            try:
+                payload = json.loads(failed_log.original_payload)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Original payload is not valid JSON, cannot replay safely")
+        import src.worker as worker
+        if failed_log.task_name == "tasks.process_message_async":
+            worker.process_message_async.delay(payload)
+        elif failed_log.task_name == "tasks.process_media_async":
+            worker.process_media_async.delay(**payload)
+        elif failed_log.task_name == "tasks.recalculate_personalization_stats":
+            worker.recalculate_personalization_stats.delay(**payload)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported task type for replay: {failed_log.task_name}")
+        failed_log.is_replayed = True
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Task {log_id} successfully re-enqueued for replay",
+            "task_name": failed_log.task_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to replay DLQ task: {str(e)}"
+        )

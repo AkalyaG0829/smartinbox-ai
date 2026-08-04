@@ -120,3 +120,40 @@ def recalculate_personalization_stats(user_id: str, sender_id: str, db=None) -> 
     finally:
         if not is_external_db:
             session.close()
+
+from celery.signals import task_failure
+import json
+import traceback
+
+@task_failure.connect
+def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj, einfo, **kw):
+    """
+    Catches permanently failed Celery tasks and persists them to the FailedTaskLog.
+    """
+    from src.database.session import SessionLocal
+    from src.infrastructure.models import FailedTaskLog
+    db = SessionLocal()
+    try:
+        task_name = sender.name if hasattr(sender, 'name') else "unknown"
+        original_payload = None
+        if args and len(args) > 0:
+            if isinstance(args[0], dict):
+                original_payload = json.dumps(args[0])
+            elif isinstance(args[0], str):
+                original_payload = args[0]
+            else:
+                original_payload = str(args)
+        tb_str = "".join(traceback.format_exception(type(exception), exception, traceback_obj)) if traceback_obj else None
+        failed_log = FailedTaskLog(
+            task_id=task_id,
+            task_name=task_name,
+            original_payload=original_payload,
+            exception_details=str(exception),
+            traceback_details=tb_str
+        )
+        db.add(failed_log)
+        db.commit()
+    except Exception as e:
+        print(f"Failed to log task failure to DLQ: {e}")
+    finally:
+        db.close()

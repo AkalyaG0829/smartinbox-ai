@@ -113,3 +113,15 @@ class UserInteraction(Base):
 
     user = relationship("User", back_populates="interactions")
     message = relationship("Message", back_populates="interactions")
+
+class FailedTaskLog(Base):
+    __tablename__ = "failed_task_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(255), nullable=False)
+    task_name = Column(String(255), nullable=False)
+    original_payload = Column(String, nullable=True)
+    exception_details = Column(String, nullable=True)
+    traceback_details = Column(String, nullable=True)
+    failed_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    is_replayed = Column(Boolean, default=False)
