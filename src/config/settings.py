@@ -1,9 +1,10 @@
 import os
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql://smartinbox_user:smartinbox_password@localhost:5432/smartinbox_db"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    DATABASE_URL: str = Field(..., description="PostgreSQL database connection string")
+    REDIS_URL: str = Field(..., description="Redis connection string")
 
     SPEECH_TO_TEXT_PROVIDER: str = "local"  # 'cloud' or 'local'
     OCR_PROVIDER: str = "local"             # 'cloud' or 'local'
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
 
     PORT: int = 8000
     ENVIRONMENT: str = "development"
-    API_KEY: str = "dev-secret-api-key"
+    API_KEY: str = Field(..., description="Secure API Key for application access")
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),

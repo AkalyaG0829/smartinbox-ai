@@ -1,7 +1,13 @@
 import pytest
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
+
+# Mock environment variables for strict Pydantic settings
+os.environ["API_KEY"] = "test-secret-api-key"
+os.environ["DATABASE_URL"] = "postgresql://invalid_user:invalid_password@localhost:5432/invalid_db"
+os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
 # Mock database url using sqlite in-memory database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
