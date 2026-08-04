@@ -256,3 +256,18 @@ async def create_user_interaction(payload: UserInteractionRequest, db: Session =
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to record interaction: {str(e)}"
         )
+
+@app.get("/api/v1/analytics/alignment", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
+async def get_routing_alignment_analytics(db: Session = Depends(get_db)):
+    """
+    Retrieves the routing decision alignment analytics by comparing system routing
+    decisions with the user's actual interaction outcomes.
+    """
+    try:
+        from src.application.analytics_service import AnalyticsService
+        return AnalyticsService.get_routing_alignment_analytics(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch alignment analytics: {str(e)}"
+        )

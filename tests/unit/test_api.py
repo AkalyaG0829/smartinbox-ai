@@ -27,3 +27,13 @@ def test_route_message_endpoint(client):
     assert "reason" in data
     assert "confidence" in data
     assert "evidence_message_ids" in data
+
+def test_get_routing_alignment_analytics_endpoint(client):
+    response = client.get("/api/v1/analytics/alignment")
+    assert response.status_code == 200
+    data = response.json()
+    assert "alignment_rate" in data
+    assert "total_actions" in data
+    assert "aligned_count" in data
+    assert "misaligned_count" in data
+    assert "mismatches" in data
