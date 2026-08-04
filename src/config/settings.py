@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     PORT: int = 8000
     ENVIRONMENT: str = "development"
+    API_KEY: str = "dev-secret-api-key"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),

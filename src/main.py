@@ -4,6 +4,45 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 from celery.result import AsyncResult
+from fastapi.security.api_key import APIKeyHeader
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+import uuid
+import logging
+import contextvars
+
+# Logging and Correlation ID setup
+correlation_id_var = contextvars.ContextVar("correlation_id", default="-")
+
+class CorrelationIdFilter(logging.Filter):
+    def filter(self, record):
+        record.correlation_id = correlation_id_var.get()
+        return True
+
+logger = logging.getLogger("smartinbox")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('{"time": "%(asctime)s", "level": "%(levelname)s", "correlation_id": "%(correlation_id)s", "message": "%(message)s"}'))
+logger.addHandler(handler)
+logger.addFilter(CorrelationIdFilter())
+
+# API Key Dependency
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def get_api_key(api_key_header: str = Depends(api_key_header)):
+    if not api_key_header or api_key_header != settings.API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API Key"
+        )
+    return api_key_header
+
+# Rate Limiter setup
+limiter = Limiter(key_func=get_remote_address)
 
 from src.config.settings import settings
 from src.database.session import engine, Base, get_db
@@ -46,6 +85,21 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add Rate Limiter Exception Handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+class CorrelationIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+        correlation_id_var.set(correlation_id)
+
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = correlation_id
+        return response
+
+app.add_middleware(CorrelationIdMiddleware)
+
 # Providers initialization
 stt_prov = MockSpeechToTextProvider()
 ocr_prov = MockOCRProvider()
@@ -60,6 +114,8 @@ def get_health(db: Session = Depends(get_db)):
     health_status = {
         "status": "healthy",
         "database": "unreachable",
+        "redis": "unreachable",
+        "pgvector": "unreachable",
         "settings": {
             "environment": settings.ENVIRONMENT,
             "stt_provider": settings.SPEECH_TO_TEXT_PROVIDER,
@@ -78,6 +134,22 @@ def get_health(db: Session = Depends(get_db)):
         except Exception:
             health_status["status"] = "unhealthy"
 
+    try:
+        import redis
+        r = redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+        if r.ping():
+            health_status["redis"] = "healthy"
+    except Exception:
+        health_status["status"] = "unhealthy"
+
+    try:
+        from sqlalchemy import text
+        res = db.execute(text("SELECT '[1,2,3]'::vector;")).fetchone()
+        if res:
+            health_status["pgvector"] = "healthy"
+    except Exception:
+        health_status["status"] = "unhealthy"
+
     if health_status["status"] == "unhealthy":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -87,7 +159,8 @@ def get_health(db: Session = Depends(get_db)):
     return health_status
 
 @app.post("/api/v1/messages/route", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
-async def route_message(payload: Dict[str, Any], db: Session = Depends(get_db)):
+@limiter.limit("100/minute")
+async def route_message(request: Request, payload: Dict[str, Any], db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Ingests an incoming message and determines the routing action.
     """
@@ -109,7 +182,8 @@ async def route_message(payload: Dict[str, Any], db: Session = Depends(get_db)):
         )
 
 @app.post("/api/v1/messages/process", response_model=MessageProcessingResult, status_code=status.HTTP_200_OK)
-async def process_message(payload: MessageProcessingRequest, db: Session = Depends(get_db)):
+@limiter.limit("100/minute")
+async def process_message(request: Request, request_data: MessageProcessingRequest, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Ingests an incoming message and executes modular Phase 2 processing,
     returning structured safety, urgency, personalization, and classification results.
@@ -123,7 +197,7 @@ async def process_message(payload: MessageProcessingRequest, db: Session = Depen
     )
 
     try:
-        result = await pipeline.process_incoming_message(payload)
+        result = await pipeline.process_incoming_message(request_data)
         return result
     except Exception as e:
         raise HTTPException(
@@ -132,12 +206,13 @@ async def process_message(payload: MessageProcessingRequest, db: Session = Depen
         )
 
 @app.post("/api/v1/messages/process-async", status_code=status.HTTP_202_ACCEPTED)
-async def process_message_async_endpoint(payload: MessageProcessingRequest):
+@limiter.limit("100/minute")
+async def process_message_asynchronously(request: Request, request_data: MessageProcessingRequest, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Asynchronously enqueues the message processing request via Celery background tasks.
     """
     try:
-        task = process_message_async.delay(payload.model_dump())
+        task = process_message_async.delay(request_data.model_dump())
         return {
             "task_id": task.id,
             "status": "PENDING"
@@ -149,7 +224,8 @@ async def process_message_async_endpoint(payload: MessageProcessingRequest):
         )
 
 @app.get("/api/v1/messages/tasks/{task_id}", status_code=status.HTTP_200_OK)
-async def get_task_status(task_id: str):
+@limiter.limit("200/minute")
+async def get_task_status(request: Request, task_id: str, api_key: str = Depends(get_api_key)):
     """
     Checks the execution status of a background message processing task.
     """
@@ -181,7 +257,8 @@ async def get_task_status(task_id: str):
         )
 
 @app.post("/api/v1/interactions", status_code=status.HTTP_201_CREATED)
-async def create_user_interaction(payload: UserInteractionRequest, db: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def register_user_interaction(request: Request, payload: UserInteractionRequest, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Ingests user interaction metrics (clicks, replies, dismissals, reports) and persists in DB.
     """
@@ -258,7 +335,8 @@ async def create_user_interaction(payload: UserInteractionRequest, db: Session =
         )
 
 @app.get("/api/v1/analytics/alignment", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
-async def get_routing_alignment_analytics(db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_routing_alignment_analytics(request: Request, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Retrieves the routing decision alignment analytics by comparing system routing
     decisions with the user's actual interaction outcomes.
@@ -273,7 +351,8 @@ async def get_routing_alignment_analytics(db: Session = Depends(get_db)):
         )
 
 @app.get("/api/v1/tasks/dlq", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
-async def get_failed_tasks_dlq(db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_failed_tasks_dlq(request: Request, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Retrieves a list of permanently failed tasks from the Dead Letter Queue.
     """
@@ -300,7 +379,8 @@ async def get_failed_tasks_dlq(db: Session = Depends(get_db)):
         )
 
 @app.post("/api/v1/tasks/dlq/{log_id}/replay", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
-async def replay_failed_task(log_id: int, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+async def replay_failed_task(request: Request, log_id: int, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
     """
     Replays a specific failed task from the DLQ by re-enqueueing it to Celery.
     """

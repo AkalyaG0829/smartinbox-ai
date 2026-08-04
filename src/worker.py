@@ -2,6 +2,35 @@ from celery import Celery
 from src.config.settings import settings
 from sqlalchemy.exc import OperationalError, DBAPIError
 from redis.exceptions import ConnectionError, TimeoutError
+import logging
+import contextvars
+from celery.signals import task_prerun, task_postrun
+
+correlation_id_var = contextvars.ContextVar("correlation_id", default="-")
+
+class CeleryTelemetryFilter(logging.Filter):
+    def filter(self, record):
+        record.correlation_id = correlation_id_var.get()
+        if not hasattr(record, "taskName"):
+            record.taskName = "-"
+        return True
+
+logger = logging.getLogger("smartinbox_worker")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('{"time": "%(asctime)s", "level": "%(levelname)s", "correlation_id": "%(correlation_id)s", "task": "%(taskName)s", "message": "%(message)s"}'))
+logger.addHandler(handler)
+logger.addFilter(CeleryTelemetryFilter())
+
+@task_prerun.connect
+def setup_task_logging(task_id, task, *args, **kwargs):
+    # Try to extract correlation ID if passed in args/kwargs
+    # For now we'll just set it to the celery task id if not provided
+    correlation_id_var.set(task_id)
+
+@task_postrun.connect
+def teardown_task_logging(task_id, task, *args, **kwargs):
+    correlation_id_var.set("-")
 
 # Initialize Celery app
 celery_app = Celery(
@@ -29,15 +58,16 @@ def warm_up_model(sender, **kwargs):
         from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
         emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
         emb_prov.warmup()
+        logger.info("Celery worker eager warmup completed successfully", extra={"taskName": "warm_up_model"})
     except Exception as e:
-        print(f"Celery worker eager warmup failed: {e}")
+        logger.error(f"Celery worker eager warmup failed: {e}", extra={"taskName": "warm_up_model"})
 
 @celery_app.task(name="tasks.process_media_async")
 def process_media_async(message_id: str, media_type: str, media_url: str):
     """
     Background job to process media elements (speech-to-text / OCR) asynchronously.
     """
-    print(f"Starting async media parsing task for message {message_id} ({media_type})")
+    logger.info(f"Starting async media parsing task for message {message_id} ({media_type})", extra={"taskName": "tasks.process_media_async"})
     return {
         "status": "completed",
         "message_id": message_id,
@@ -83,10 +113,11 @@ def process_message_async(request_data: dict) -> dict:
 
     try:
         request = MessageProcessingRequest(**request_data)
+        logger.info(f"Starting async processing for message {request.message_id}", extra={"taskName": "tasks.process_message_async"})
         result = asyncio.run(pipeline.process_incoming_message(request))
         return result.model_dump()
     except Exception as e:
-        print(f"Celery message processing failed: {str(e)}")
+        logger.error(f"Celery message processing failed: {str(e)}", extra={"taskName": "tasks.process_message_async"})
         raise e
     finally:
         db.close()
@@ -109,13 +140,13 @@ def recalculate_personalization_stats(user_id: str, sender_id: str, db=None) -> 
     is_external_db = db is not None
     session = db if is_external_db else SessionLocal()
     try:
-        print(f"Starting background personalization re-aggregation for user {user_id} and sender {sender_id}")
+        logger.info(f"Starting background personalization re-aggregation for user {user_id} and sender {sender_id}", extra={"taskName": "tasks.recalculate_personalization_stats"})
         stats = PersonalizationService.get_historical_stats(session, user_id, sender_id)
         from src.application.personalization_cache import PersonalizationCache
         PersonalizationCache.set(user_id, sender_id, stats)
         return stats
     except Exception as e:
-        print(f"Error recalculating personalization stats: {str(e)}")
+        logger.error(f"Error recalculating personalization stats: {str(e)}", extra={"taskName": "tasks.recalculate_personalization_stats"})
         raise e
     finally:
         if not is_external_db:
@@ -153,7 +184,8 @@ def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj,
         )
         db.add(failed_log)
         db.commit()
+        logger.error(f"Task {task_name} permanently failed. Logged to DLQ.", extra={"taskName": task_name})
     except Exception as e:
-        print(f"Failed to log task failure to DLQ: {e}")
+        logger.error(f"Failed to log task failure to DLQ: {e}", extra={"taskName": "handle_task_failure"})
     finally:
         db.close()

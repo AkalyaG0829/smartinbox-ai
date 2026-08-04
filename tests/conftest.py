@@ -19,10 +19,10 @@ from src.infrastructure.models import User, Channel, ChannelMember, Contact, Mes
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
-    # SQLite doesn't natively support pgvector, but since we are mocking/stubbing vector operations 
-    # and not running raw pgvector operations in unit tests, it works if the model contains the Vector type 
+    # SQLite doesn't natively support pgvector, but since we are mocking/stubbing vector operations
+    # and not running raw pgvector operations in unit tests, it works if the model contains the Vector type
     # as long as we don't try to query vectors. To handle sqlite, we can mock/override the Vector type mapping.
-    
+
     # Create all tables in SQLite
     Base.metadata.create_all(bind=engine)
     yield
@@ -34,9 +34,9 @@ def db_session():
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
-    
+
     yield session
-    
+
     session.close()
     transaction.rollback()
     connection.close()
@@ -48,7 +48,12 @@ def client(db_session):
             yield db_session
         finally:
             pass
-            
+
     app.dependency_overrides[get_db] = override_get_db
+
+    # Override API Key security for tests (so existing tests pass)
+    from src.main import get_api_key
+    app.dependency_overrides[get_api_key] = lambda: "test-override-key"
+
     yield TestClient(app)
     app.dependency_overrides.clear()

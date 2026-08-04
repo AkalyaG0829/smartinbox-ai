@@ -1,7 +1,26 @@
 import pytest
 
-def test_health_endpoint(client):
-    response = client.get("/health")
+from unittest.mock import patch
+
+@patch("redis.Redis.from_url")
+def test_health_endpoint(mock_redis, client):
+    # Mock Redis ping to return true
+    mock_redis.return_value.ping.return_value = True
+
+    # We also need to mock the pgvector execution
+    # Since testing uses SQLite which doesn't have vector by default,
+    # we mock the Session's execute just for the vector check if we can,
+    # or just accept that pgvector might be 'unreachable' but status should not be 503 if we allow partial health.
+    # Wait, in get_health, if any is unreachable, does it return 503?
+    # Ah, in main.py:
+    # try: res = db.execute(text("SELECT '[1,2,3]'::vector;")).fetchone()
+    # except Exception: health_status["status"] = "unhealthy"
+
+    with patch("sqlalchemy.orm.Session.execute") as mock_exec:
+        # DB will be healthy
+        mock_exec.return_value.fetchone.return_value = [True]
+        response = client.get("/health")
+
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
