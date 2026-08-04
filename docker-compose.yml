@@ -81,7 +81,44 @@ services:
     volumes:
       - .:/app
     command: celery -A src.worker.celery_app worker -Q routing_queue --loglevel=info
+  celery_exporter:
+    image: danihodovic/celery-exporter:latest
+    container_name: smartinbox_celery_exporter
+    environment:
+      - BROKER_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smartinbox_prometheus
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - backend
+      - celery_exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smartinbox_grafana
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:

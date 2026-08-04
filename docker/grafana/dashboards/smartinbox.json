@@ -1,0 +1,11 @@
+{
+  "title": "SmartInbox Production Dashboard",
+  "panels": [
+    {"title": "API Request Rate", "type": "timeseries", "targets": [{"expr": "rate(http_requests_total[1m])"}]},
+    {"title": "API P99 Latency", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m]))"}]},
+    {"title": "Routing Decisions", "type": "timeseries", "targets": [{"expr": "rate(smartinbox_routing_decisions_total[1m])"}]},
+    {"title": "DLQ Entries", "type": "timeseries", "targets": [{"expr": "rate(smartinbox_dlq_entries_total[1m])"}]},
+    {"title": "ML Queue Depth", "type": "timeseries", "targets": [{"expr": "celery_queue_length{queue=\"ml_queue\"}"}]},
+    {"title": "Routing Queue Depth", "type": "timeseries", "targets": [{"expr": "celery_queue_length{queue=\"routing_queue\"}"}]}
+  ]
+}

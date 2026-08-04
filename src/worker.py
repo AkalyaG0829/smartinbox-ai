@@ -192,6 +192,8 @@ def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj,
         )
         db.add(failed_log)
         db.commit()
+        from src.application.metrics import DLQ_ENTRIES
+        DLQ_ENTRIES.labels(task_name=task_name).inc()
         logger.error(f"Task {task_name} permanently failed. Logged to DLQ.", extra={"taskName": task_name})
     except Exception as e:
         logger.error(f"Failed to log task failure to DLQ: {e}", extra={"taskName": "handle_task_failure"})
