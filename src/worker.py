@@ -47,7 +47,12 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    task_reject_on_worker_lost=True
+    task_reject_on_worker_lost=True,
+    task_routes={
+        'tasks.process_message_async': {'queue': 'ml_queue'},
+        'tasks.recalculate_personalization_stats': {'queue': 'routing_queue'},
+        'tasks.process_media_async': {'queue': 'routing_queue'},
+    }
 )
 
 from celery.signals import worker_ready

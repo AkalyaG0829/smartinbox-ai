@@ -50,11 +50,11 @@ services:
       - .:/app
     command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
 
-  worker:
+  ml_worker:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-    container_name: smartinbox_worker
+    container_name: smartinbox_ml_worker
     env_file:
       - .env
     depends_on:
@@ -64,7 +64,23 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
-    command: celery -A src.worker.celery_app worker --loglevel=info
+    command: celery -A src.worker.celery_app worker -Q ml_queue --loglevel=info --concurrency=2
+
+  routing_worker:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: smartinbox_routing_worker
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: celery -A src.worker.celery_app worker -Q routing_queue --loglevel=info
 
 volumes:
   postgres_data:
