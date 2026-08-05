@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     API_KEY: str = Field(..., description="Secure API Key for application access")
 
+    CORS_ORIGINS: str = ""
+    WORKER_ROLE: str = "all"  # 'all', 'ml', or 'routing'
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
         env_file_encoding="utf-8",

@@ -4,6 +4,7 @@ services:
   db:
     image: ankane/pgvector:latest
     container_name: smartinbox_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -22,6 +23,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: smartinbox_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
@@ -37,6 +40,7 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     container_name: smartinbox_backend
+    restart: unless-stopped
     env_file:
       - .env
     ports:
@@ -55,8 +59,11 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     container_name: smartinbox_ml_worker
+    restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - WORKER_ROLE=ml
     depends_on:
       db:
         condition: service_healthy
@@ -71,8 +78,11 @@ services:
       context: .
       dockerfile: docker/backend/Dockerfile
     container_name: smartinbox_routing_worker
+    restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - WORKER_ROLE=routing
     depends_on:
       db:
         condition: service_healthy
@@ -84,6 +94,7 @@ services:
   celery_exporter:
     image: danihodovic/celery-exporter:latest
     container_name: smartinbox_celery_exporter
+    restart: unless-stopped
     environment:
       - BROKER_URL=redis://redis:6379/0
     depends_on:
@@ -93,6 +104,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: smartinbox_prometheus
+    restart: unless-stopped
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -106,6 +118,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: smartinbox_grafana
+    restart: unless-stopped
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro

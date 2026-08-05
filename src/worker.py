@@ -62,6 +62,10 @@ def warm_up_model(sender, **kwargs):
     """
     Eagerly loads and warms up the SentenceTransformer model when worker boots.
     """
+    if settings.WORKER_ROLE not in ["all", "ml"]:
+        logger.info(f"Skipping ML warmup. Worker role is {settings.WORKER_ROLE}.", extra={"taskName": "warm_up_model"})
+        return
+
     try:
         from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
         emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
@@ -70,7 +74,11 @@ def warm_up_model(sender, **kwargs):
     except Exception as e:
         logger.error(f"Celery worker eager warmup failed: {e}", extra={"taskName": "warm_up_model"})
 
-@celery_app.task(name="tasks.process_media_async")
+@celery_app.task(
+    name="tasks.process_media_async",
+    soft_time_limit=60,
+    time_limit=90
+)
 def process_media_async(message_id: str, media_type: str, media_url: str):
     """
     Background job to process media elements (speech-to-text / OCR) asynchronously.
@@ -87,7 +95,9 @@ def process_media_async(message_id: str, media_type: str, media_url: str):
     autoretry_for=(OperationalError, DBAPIError, ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=60,
-    max_retries=5
+    max_retries=5,
+    soft_time_limit=120,
+    time_limit=150
 )
 def process_message_async(request_data: dict) -> dict:
     """
@@ -176,12 +186,18 @@ def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj,
         task_name = sender.name if hasattr(sender, 'name') else "unknown"
         original_payload = None
         if args and len(args) > 0:
-            if isinstance(args[0], dict):
-                original_payload = json.dumps(args[0])
-            elif isinstance(args[0], str):
-                original_payload = args[0]
+            payload_data = args[0]
+            if isinstance(payload_data, dict):
+                sanitized_data = payload_data.copy()
+                sensitive_keys = ['api_key', 'password', 'token', 'authorization', 'secret']
+                for key in sanitized_data:
+                    if any(s in key.lower() for s in sensitive_keys):
+                        sanitized_data[key] = "***MASKED***"
+                original_payload = json.dumps(sanitized_data)
+            elif isinstance(payload_data, str):
+                original_payload = payload_data
             else:
-                original_payload = str(args)
+                original_payload = str(payload_data)
         tb_str = "".join(traceback.format_exception(type(exception), exception, traceback_obj)) if traceback_obj else None
         failed_log = FailedTaskLog(
             task_id=task_id,

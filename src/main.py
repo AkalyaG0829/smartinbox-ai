@@ -59,17 +59,6 @@ from src.worker import celery_app, process_message_async
 # LIFESPAN - Create database schemas upon initialization
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Try to initialize database tables
-    retries = 3
-    while retries > 0:
-        try:
-            Base.metadata.create_all(bind=engine)
-            break
-        except Exception as e:
-            print(f"Database connection waiting... Retrying. Error: {e}")
-            time.sleep(2)
-            retries -= 1
-
     # Eagerly warm up the embedding model during startup
     try:
         emb_prov.warmup()
@@ -84,6 +73,18 @@ app = FastAPI(
     version="2.1.0",
     lifespan=lifespan
 )
+
+from fastapi.middleware.cors import CORSMiddleware
+
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Add Rate Limiter Exception Handler
 app.state.limiter = limiter
