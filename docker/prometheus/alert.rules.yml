@@ -1,0 +1,72 @@
+groups:
+- name: smartinbox-alerts
+  rules:
+  # API 5xx error rate
+  - alert: HighAPI5xxErrorRate
+    expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High API 5xx error rate"
+      description: "More than 5% of requests are returning 5xx errors over the last 5 minutes."
+
+  # API P99 latency
+  - alert: HighAPILatency
+    expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2.0
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API latency (P99)"
+      description: "99th percentile of API latency is above 2.0 seconds."
+
+  # ML queue backlog
+  - alert: HighMLQueueBacklog
+    expr: celery_queue_length{queue_name="ml_queue"} > 100
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High ML queue backlog"
+      description: "The ML Celery queue has more than 100 pending tasks."
+
+  # routing queue backlog
+  - alert: HighRoutingQueueBacklog
+    expr: celery_queue_length{queue_name="routing_queue"} > 100
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Routing queue backlog"
+      description: "The Routing Celery queue has more than 100 pending tasks."
+
+  # DLQ spike
+  - alert: DLQSpike
+    expr: increase(smartinbox_dlq_entries_total[5m]) > 10
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "DLQ Spike detected"
+      description: "More than 10 tasks have failed and been routed to the DLQ in the last 5 minutes."
+
+  # worker availability
+  - alert: WorkerDown
+    expr: up{job="smartinbox_celery"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Celery worker/exporter is down"
+      description: "Prometheus cannot scrape the celery_exporter."
+
+  # backend availability
+  - alert: BackendDown
+    expr: up{job="smartinbox_api"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "SmartInbox backend is down"
+      description: "Prometheus cannot scrape the backend /metrics endpoint."
