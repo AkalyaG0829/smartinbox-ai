@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from typing import List
 from src.domain.interfaces import EmbeddingProvider
 
@@ -6,6 +7,8 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
         self._model = None
+        self._init_lock = threading.Lock()
+        self._inference_lock = threading.Lock()
 
     def _lazy_init(self):
         """
@@ -13,8 +16,10 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
         Prevents startup overhead if model is unused or dependencies are missing.
         """
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_name)
+            with self._init_lock:
+                if self._model is None:
+                    from sentence_transformers import SentenceTransformer
+                    self._model = SentenceTransformer(self.model_name)
 
     def warmup(self):
         """
@@ -24,7 +29,8 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
         print(f"Eagerly warming up embedding model: {self.model_name}...")
         self._lazy_init()
         try:
-            self._model.encode(["warmup"])
+            with self._inference_lock:
+                self._model.encode(["warmup"])
             print("Embedding model warmup complete.")
         except Exception as e:
             print(f"Embedding model warmup failed: {str(e)}")
@@ -44,11 +50,15 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
 
         self._lazy_init()
 
+        def _encode():
+            with self._inference_lock:
+                return self._model.encode([text])
+
         try:
             loop = asyncio.get_running_loop()
-            embeddings = await loop.run_in_executor(None, lambda: self._model.encode([text]))
+            embeddings = await loop.run_in_executor(None, _encode)
         except RuntimeError:
-            embeddings = self._model.encode([text])
+            embeddings = _encode()
 
         result = [float(x) for x in embeddings[0]]
 

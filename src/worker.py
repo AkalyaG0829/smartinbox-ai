@@ -57,6 +57,9 @@ celery_app.conf.update(
 
 from celery.signals import worker_ready
 
+from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
+emb_prov_singleton = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
+
 @worker_ready.connect
 def warm_up_model(sender, **kwargs):
     """
@@ -67,9 +70,7 @@ def warm_up_model(sender, **kwargs):
         return
 
     try:
-        from src.infrastructure.providers.sentence_transformer_provider import SentenceTransformersEmbeddingProvider
-        emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
-        emb_prov.warmup()
+        emb_prov_singleton.warmup()
         logger.info("Celery worker eager warmup completed successfully", extra={"taskName": "warm_up_model"})
     except Exception as e:
         logger.error(f"Celery worker eager warmup failed: {e}", extra={"taskName": "warm_up_model"})
@@ -118,14 +119,13 @@ def process_message_async(request_data: dict) -> dict:
 
     stt_prov = MockSpeechToTextProvider()
     ocr_prov = MockOCRProvider()
-    emb_prov = SentenceTransformersEmbeddingProvider(model_name=settings.EMBEDDING_MODEL)
     inj_shld = LocalPromptInjectionShield()
 
     pipeline = MessageRoutingPipeline(
         db=db,
         stt_provider=stt_prov,
         ocr_provider=ocr_prov,
-        embedding_provider=emb_prov,
+        embedding_provider=emb_prov_singleton,
         injection_shield=inj_shld
     )
 

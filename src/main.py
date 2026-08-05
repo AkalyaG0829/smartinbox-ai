@@ -41,10 +41,11 @@ def get_api_key(api_key_header: str = Depends(api_key_header)):
         )
     return api_key_header
 
-# Rate Limiter setup
-limiter = Limiter(key_func=get_remote_address)
-
 from src.config.settings import settings
+
+# Rate Limiter setup
+limiter_storage = "memory://" if settings.ENVIRONMENT == "test" else settings.REDIS_URL
+limiter = Limiter(key_func=get_remote_address, storage_uri=limiter_storage)
 from src.database.session import engine, Base, get_db
 from src.infrastructure.providers.mock_providers import (
     MockSpeechToTextProvider,
