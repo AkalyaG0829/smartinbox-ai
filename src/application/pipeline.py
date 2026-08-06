@@ -55,6 +55,12 @@ class MessageRoutingPipeline:
             if not media_transcript:
                 media_transcript = await self.ocr_provider.extract_text(None)
 
+        if media_transcript:
+            from src.config.settings import settings
+            if settings.ENABLE_REDACTION:
+                from src.domain.redaction import DataRedactor
+                media_transcript = DataRedactor.redact(media_transcript)
+
         analyzable_text = text_content
         if not analyzable_text.strip() and media_transcript:
             analyzable_text = media_transcript
@@ -195,6 +201,12 @@ class MessageRoutingPipeline:
             media_transcript = await self.stt_provider.transcribe(None)
         elif media_type == 'image':
             media_transcript = await self.ocr_provider.extract_text(None)
+
+        if media_transcript:
+            from src.config.settings import settings
+            if settings.ENABLE_REDACTION:
+                from src.domain.redaction import DataRedactor
+                media_transcript = DataRedactor.redact(media_transcript)
 
         analyzable_text = text_content
         if not analyzable_text.strip() and media_transcript:

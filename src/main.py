@@ -171,6 +171,10 @@ async def route_message(request: Request, payload: Dict[str, Any], db: Session =
     """
     Ingests an incoming message and determines the routing action.
     """
+    if settings.ENABLE_REDACTION and 'message_text' in payload and payload['message_text']:
+        from src.domain.redaction import DataRedactor
+        payload['message_text'] = DataRedactor.redact(payload['message_text'])
+
     pipeline = MessageRoutingPipeline(
         db=db,
         stt_provider=stt_prov,
@@ -195,6 +199,10 @@ async def process_message(request: Request, request_data: MessageProcessingReque
     Ingests an incoming message and executes modular Phase 2 processing,
     returning structured safety, urgency, personalization, and classification results.
     """
+    if settings.ENABLE_REDACTION and request_data.message_text:
+        from src.domain.redaction import DataRedactor
+        request_data.message_text = DataRedactor.redact(request_data.message_text)
+
     pipeline = MessageRoutingPipeline(
         db=db,
         stt_provider=stt_prov,
@@ -218,6 +226,10 @@ async def process_message_asynchronously(request: Request, request_data: Message
     """
     Asynchronously enqueues the message processing request via Celery background tasks.
     """
+    if settings.ENABLE_REDACTION and request_data.message_text:
+        from src.domain.redaction import DataRedactor
+        request_data.message_text = DataRedactor.redact(request_data.message_text)
+
     try:
         task = process_message_async.delay(request_data.model_dump())
         return {

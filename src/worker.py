@@ -198,12 +198,23 @@ def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj,
                 original_payload = payload_data
             else:
                 original_payload = str(payload_data)
+
+        if original_payload and settings.ENABLE_REDACTION:
+            from src.domain.redaction import DataRedactor
+            original_payload = DataRedactor.redact(original_payload)
         tb_str = "".join(traceback.format_exception(type(exception), exception, traceback_obj)) if traceback_obj else None
+        exception_details_str = str(exception)
+        if settings.ENABLE_REDACTION:
+            from src.domain.redaction import DataRedactor
+            exception_details_str = DataRedactor.redact(exception_details_str)
+            if tb_str:
+                tb_str = DataRedactor.redact(tb_str)
+
         failed_log = FailedTaskLog(
             task_id=task_id,
             task_name=task_name,
             original_payload=original_payload,
-            exception_details=str(exception),
+            exception_details=exception_details_str,
             traceback_details=tb_str
         )
         db.add(failed_log)

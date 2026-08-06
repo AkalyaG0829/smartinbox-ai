@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     EMBEDDING_CACHE_ENABLED: bool = True
     EMBEDDING_CACHE_TTL: int = 86400
 
+    ENABLE_REDACTION: bool = True
+
     PORT: int = 8000
     ENVIRONMENT: str = "development"
     API_KEY: str = Field(..., description="Secure API Key for application access")
