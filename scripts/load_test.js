@@ -34,9 +34,11 @@ export default function () {
 
     // 2. Async message processing endpoint (verify Celery enqueuing performance)
     const payload = JSON.stringify({
-        content: `Test message ${__VU}:${__ITER}`,
+        message_id: `msg_${__VU}_${__ITER}`,
         user_id: `user_${__VU}`,
-        channel: 'email'
+        conversation_type: 'personal',
+        created_at: new Date().toISOString(),
+        message_text: `Test message ${__VU}:${__ITER}`
     });
 
     const routeRes = http.post(`${BASE_URL}/api/v1/messages/process-async`, payload, params);
