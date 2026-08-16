@@ -102,10 +102,11 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(CorrelationIdMiddleware)
 
+import prometheus_client
 from prometheus_fastapi_instrumentator import Instrumentator
-Instrumentator().instrument(app).expose(app, include_in_schema=False)
-
 import src.application.metrics  # Initialize custom business metrics
+
+Instrumentator(registry=prometheus_client.REGISTRY).instrument(app).expose(app, include_in_schema=False)
 
 # Providers initialization
 stt_prov = MockSpeechToTextProvider()
@@ -222,7 +223,7 @@ async def process_message(request: Request, request_data: MessageProcessingReque
 
 @app.post("/api/v1/messages/process-async", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("100/minute")
-async def process_message_asynchronously(request: Request, request_data: MessageProcessingRequest, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):
+async def process_message_asynchronously(request: Request, request_data: MessageProcessingRequest, api_key: str = Depends(get_api_key)):
     """
     Asynchronously enqueues the message processing request via Celery background tasks.
     """

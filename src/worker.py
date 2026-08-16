@@ -175,10 +175,11 @@ import json
 import traceback
 
 @task_failure.connect
-def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj, einfo, **kw):
+def handle_task_failure(sender, task_id, exception, args, kwargs, einfo, **kw):
     """
     Catches permanently failed Celery tasks and persists them to the FailedTaskLog.
     """
+    traceback_obj = kw.get('traceback')
     from src.database.session import SessionLocal
     from src.infrastructure.models import FailedTaskLog
     db = SessionLocal()
@@ -219,8 +220,9 @@ def handle_task_failure(sender, task_id, exception, args, kwargs, traceback_obj,
         )
         db.add(failed_log)
         db.commit()
-        from src.application.metrics import DLQ_ENTRIES
-        DLQ_ENTRIES.labels(task_name=task_name).inc()
+        import redis
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1.0)
+        redis_client.hincrby("smartinbox:metrics:dlq_entries", task_name, 1)
         logger.error(f"Task {task_name} permanently failed. Logged to DLQ.", extra={"taskName": task_name})
     except Exception as e:
         logger.error(f"Failed to log task failure to DLQ: {e}", extra={"taskName": "handle_task_failure"})

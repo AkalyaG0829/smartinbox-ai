@@ -1,11 +1,126 @@
 {
   "title": "SmartInbox Production Dashboard",
+  "timezone": "browser",
   "panels": [
-    {"title": "API Request Rate", "type": "timeseries", "targets": [{"expr": "rate(http_requests_total[1m])"}]},
-    {"title": "API P99 Latency", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m]))"}]},
-    {"title": "Routing Decisions", "type": "timeseries", "targets": [{"expr": "rate(smartinbox_routing_decisions_total[1m])"}]},
-    {"title": "DLQ Entries", "type": "timeseries", "targets": [{"expr": "rate(smartinbox_dlq_entries_total[1m])"}]},
-    {"title": "ML Queue Depth", "type": "timeseries", "targets": [{"expr": "celery_queue_length{queue=\"ml_queue\"}"}]},
-    {"title": "Routing Queue Depth", "type": "timeseries", "targets": [{"expr": "celery_queue_length{queue=\"routing_queue\"}"}]}
+    {
+      "id": 1,
+      "title": "API Request Rate",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "rate(http_requests_total[5m])" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "API P99 Latency",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Routing Decisions",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum by (action) (rate(smartinbox_routing_decisions_total[5m]))", "legendFormat": "{{action}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Total Routing Decisions",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum by (action) (smartinbox_routing_decisions_total)", "legendFormat": "{{action}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Embedding P99 Duration",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 0, "y": 16, "w": 8, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, rate(smartinbox_embedding_duration_seconds_bucket[5m]))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "ML Queue Depth",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 8, "y": 16, "w": 8, "h": 8 },
+      "targets": [
+        { "expr": "celery_queue_length{queue_name=\"ml_queue\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Routing Queue Depth",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+      "targets": [
+        { "expr": "celery_queue_length{queue_name=\"routing_queue\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "DLQ Entries",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+      "targets": [
+        { "expr": "sum by (task_name) (rate(smartinbox_dlq_entries_total[5m]))", "legendFormat": "{{task_name}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    }
   ]
 }
