@@ -1,10 +1,9 @@
 import React from 'react';
 import { ArrowRight, BrainCircuit, Inbox, Activity } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import RoutingVisualization from './RoutingVisualization';
 
 export default function Hero() {
-  const scrollToDemo = () => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
-  const scrollToArch = () => document.getElementById('architecture')?.scrollIntoView({ behavior: 'smooth' });
 
   return (
     <section className="relative pt-24 pb-32 overflow-hidden">
@@ -27,13 +26,13 @@ export default function Hero() {
         </p>
         
         <div className="flex flex-col sm:flex-row items-center gap-4 mb-20">
-          <button onClick={scrollToDemo} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-8 py-3.5 rounded-xl transition-all shadow-lg hover:shadow-indigo-600/25">
+          <Link to="/live-demo" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-8 py-3.5 rounded-xl transition-all shadow-lg hover:shadow-indigo-600/25">
             Try Live Demo
             <ArrowRight className="w-4 h-4" />
-          </button>
-          <button onClick={scrollToArch} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-medium px-8 py-3.5 rounded-xl transition-all border border-slate-700">
+          </Link>
+          <Link to="/architecture" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-medium px-8 py-3.5 rounded-xl transition-all border border-slate-700">
             View Architecture
-          </button>
+          </Link>
         </div>
 
         {/* Visual Illustration */}
