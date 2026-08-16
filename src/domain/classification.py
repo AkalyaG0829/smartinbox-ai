@@ -6,9 +6,9 @@ from src.application.schemas import SafetyResult
 class MessageClassifier:
     def __init__(self):
         # Category patterns using token boundary matching
-        self.spam_keywords = ["win", "winner", "winning", "lottery", "cashback", "lucky draw", "jackpot", "prize desk"]
+        self.spam_keywords = ["win", "winner", "winning", "lottery", "cashback", "lucky draw", "jackpot", "prize desk", "free vacation", "claim your prize"]
         self.promotion_keywords = ["sale", "off", "discount", "offer", "coupon", "marketing", "unsubscribe", "try50", 
-                                   "kurta set", "denim jacket", "promo", "selling", "sell", "interested", "dm if", "dm"]
+                                   "kurta set", "denim jacket", "promo", "selling", "sell", "interested", "dm if", "dm", "promotional offer"]
         self.greeting_keywords = ["good morning", "good evening", "sabko", "positive energy", "blessings", "vibes", "how are you", "hope today is peaceful"]
         
         self.forward_phrases = ["forward this", "luck changes", "sharing here", "forward to family"]
@@ -21,7 +21,7 @@ class MessageClassifier:
         self.payment_keywords = ["due", "payment", "transaction", "amount due", "credit card bill", "bill", "invoice", "rewards"]
         self.event_keywords = ["parents", "school parents", "circular", "field trip", "internship", "faculty advising", 
                                "consent", "meeting", "standup", "class", "session", "cultural", "celebration", "gathering", 
-                               "festival", "party", "club", "form is open", "sheet", "appointment", "clinic", "prescription", "doctor"]
+                               "festival", "party", "club", "form is open", "sheet", "appointment", "clinic", "prescription", "doctor", "interview", "scheduled", "project review"]
         self.update_keywords = ["order", "packed", "shipped", "delivered", "hub", "delivery-code", "tracking", "fedex", 
                                 "delivery attempt", "pickup", "driver", "route status", "scheduled between"]
         

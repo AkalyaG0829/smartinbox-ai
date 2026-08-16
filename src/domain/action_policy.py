@@ -51,14 +51,15 @@ class ActionPolicyEngine:
                 actual_reason = "Unverified business brand impersonation detected via domain mismatch."
                 
             return {
-                "action": "mute",
+                "action": "ignore",
                 "reason": actual_reason
             }
 
         # 2. Personalized Action Scoring Engine
         notify_score = 0.0
+        important_score = 0.0
         digest_score = 0.0
-        mute_score = 0.0
+        ignore_score = 0.0
 
         # Extract stats
         total_count = historical_stats.get('total_count', 0)
@@ -68,13 +69,13 @@ class ActionPolicyEngine:
 
         # Content type defaults based on exact keyword booleans
         if is_spam:
-            mute_score += 5.0
+            ignore_score += 5.0
         elif is_promotion:
             if conv_type == 'business':
                 if sender_profile.get('allows_promotions', True) and sender_profile.get('has_relationship', False):
                     digest_score += 3.0
                 else:
-                    mute_score += 4.0
+                    ignore_score += 4.0
             else:
                 digest_score += 3.0
         elif is_greeting or is_forward:
@@ -84,30 +85,25 @@ class ActionPolicyEngine:
                 mute_rate >= 0.5 or 
                 (reply_rate == 0.0 and dismissal_rate > 0)
             ):
-                mute_score += 4.0
+                ignore_score += 4.0
             else:
                 digest_score += 3.0
         elif is_urgent or has_fast_historical_reply:
             notify_score += 4.0
         elif is_payment:
             if conv_type == 'business' and sender_profile.get('has_relationship', False):
-                notify_score += 2.5
+                important_score += 3.0
             else:
                 digest_score += 2.0
         elif is_event:
-            if conv_type == 'business' and sender_profile.get('has_relationship', False):
-                notify_score += 2.5
-            else:
-                digest_score += 2.0
+            important_score += 3.0
+            notify_score += 1.0 # events can lean to notify if other factors align
         elif is_update:
-            if conv_type == 'business' and sender_profile.get('has_relationship', False):
-                notify_score += 2.5
-            else:
-                digest_score += 2.0
+            important_score += 2.5
         else: # Defaults (personal / unknown / etc.)
             if conv_type == 'personal':
                 if total_count > 0 and reply_rate > 0.5:
-                    notify_score += 2.0
+                    important_score += 2.0
                 else:
                     digest_score += 2.0
             else:
@@ -116,6 +112,7 @@ class ActionPolicyEngine:
         # Low Urgency penalty
         if is_low_urgency:
             notify_score -= 5.0
+            important_score -= 3.0
             digest_score += 3.0
 
         # Group Muting Penalties & Overrides
@@ -127,11 +124,12 @@ class ActionPolicyEngine:
                     notify_score = 4.0
                 elif is_mentioned:
                     notify_score = 0.0
-                    digest_score = 3.0
+                    important_score = 3.0
                 else:
                     notify_score = -5.0
+                    important_score = -5.0
                     if is_greeting or is_forward or is_promotion:
-                        mute_score += 5.0
+                        ignore_score += 5.0
                     else:
                         digest_score += 2.0
             else:
@@ -146,29 +144,32 @@ class ActionPolicyEngine:
         is_unverified_business = conv_type == 'business' and sender_profile.get('verified', 0) == 0
         if is_unverified_business:
             if not sender_profile.get('has_relationship', False):
-                mute_score = 6.0
+                ignore_score = 6.0
                 notify_score = 0.0
+                important_score = 0.0
                 digest_score = 0.0
 
         # Suppress feedback surveys
         if is_feedback:
             notify_score = 0.0
+            important_score = 0.0
             digest_score = 4.0
 
         # DND Suppressions
-        if is_suppressed_by_dnd and notify_score > digest_score:
+        if is_suppressed_by_dnd and (notify_score > digest_score or important_score > digest_score):
             notify_score = 0.0
+            important_score = 0.0
             digest_score = 4.0
 
         # Select action
-        if mute_score > notify_score and mute_score > digest_score:
-            action = 'mute'
+        if ignore_score > notify_score and ignore_score > important_score and ignore_score > digest_score:
+            action = 'ignore'
             reason = "Message is a promotion or spam from an unverified, muted, or low-trust sender."
             if is_spam:
                 reason = "Message contains generic spam, promotional lottery, or cashback triggers."
             elif is_promotion:
                 reason = "Promotional message from a business the user has not opted into or opted out of."
-        elif notify_score > digest_score:
+        elif notify_score > important_score and notify_score > digest_score:
             action = 'notify'
             reason = "Time-sensitive message from a trusted or close contact demanding immediate attention."
             if conv_type == 'group':
@@ -178,6 +179,9 @@ class ActionPolicyEngine:
                     reason = "Time-sensitive operational update sent by group admin."
             elif conv_type == 'business':
                 reason = "Time-sensitive service update matching active customer history."
+        elif important_score > digest_score:
+            action = 'important'
+            reason = "Time-sensitive event, update, or important information requiring attention."
         else:
             action = 'digest'
             reason = "Low-priority message or general communication, suitable for later reading."
