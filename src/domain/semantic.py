@@ -21,7 +21,9 @@ class SemanticClassifier:
             "congratulations, you won a free vacation, click here to claim your prize",
             "exclusive promotional reward, click now to claim",
             "limited time offer, buy now and receive a special discount",
-            "lottery winner, jackpot, cashback"
+            "lottery winner, jackpot, cashback",
+            "urgent account locked, verify immediately, phishing scam",
+            "summer sale, great deals inside, discount code"
         ]
         self.digest_archetypes = [
             "monthly company newsletter with the latest updates",

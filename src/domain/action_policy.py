@@ -154,6 +154,12 @@ class ActionPolicyEngine:
                     elif cat == 'digest':
                         digest_score += 3.0
 
+        # Spam & Scam Penalty Override
+        # If the message has strong spam/scam indicators, they override raw urgency keywords.
+        if is_spam or ignore_score >= 4.0:
+            notify_score = 0.0
+            important_score = 0.0
+
         # Business unverified penalty
         is_unverified_business = conv_type == 'business' and sender_profile.get('verified', 0) == 0
         if is_unverified_business:
