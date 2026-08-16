@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight, BrainCircuit, Inbox, Activity } from 'lucide-react';
+import RoutingVisualization from './RoutingVisualization';
 
 export default function Hero() {
   const scrollToDemo = () => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
@@ -36,58 +37,7 @@ export default function Hero() {
         </div>
 
         {/* Visual Illustration */}
-        <div className="w-full max-w-4xl mx-auto">
-          <div className="relative rounded-2xl border border-slate-800 bg-slate-900/50 p-4 md:p-8 backdrop-blur-sm shadow-2xl">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-              {/* Inbox */}
-              <div className="w-full md:w-1/3 flex flex-col gap-3">
-                <div className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2 text-left">Incoming</div>
-                <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 opacity-60">
-                  <div className="h-2 w-3/4 bg-slate-600 rounded mb-2"></div>
-                  <div className="h-2 w-1/2 bg-slate-600 rounded"></div>
-                </div>
-                <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 opacity-80">
-                  <div className="h-2 w-full bg-slate-600 rounded mb-2"></div>
-                  <div className="h-2 w-2/3 bg-slate-600 rounded"></div>
-                </div>
-                <div className="bg-slate-800 p-3 rounded-lg border border-slate-700">
-                  <div className="h-2 w-5/6 bg-slate-600 rounded mb-2"></div>
-                  <div className="h-2 w-1/3 bg-slate-600 rounded"></div>
-                </div>
-              </div>
-
-              {/* AI Engine */}
-              <div className="flex-shrink-0 flex items-center justify-center">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-indigo-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-                  <div className="relative bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
-                    <BrainCircuit className="w-8 h-8 text-white" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Routed */}
-              <div className="w-full md:w-1/3 flex flex-col gap-3">
-                <div className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2 text-left">Routed</div>
-                <div className="flex items-center gap-3 bg-red-950/40 p-3 rounded-lg border border-red-900/50">
-                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <div className="flex-1 h-2 bg-slate-700 rounded"></div>
-                  <span className="text-[10px] font-bold text-red-400 uppercase">Urgent</span>
-                </div>
-                <div className="flex items-center gap-3 bg-orange-950/40 p-3 rounded-lg border border-orange-900/50">
-                  <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                  <div className="flex-1 h-2 bg-slate-700 rounded"></div>
-                  <span className="text-[10px] font-bold text-orange-400 uppercase">Important</span>
-                </div>
-                <div className="flex items-center gap-3 bg-blue-950/40 p-3 rounded-lg border border-blue-900/50">
-                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                  <div className="flex-1 h-2 bg-slate-700 rounded"></div>
-                  <span className="text-[10px] font-bold text-blue-400 uppercase">Digest</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <RoutingVisualization />
       </div>
     </section>
   );
