@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Loader2, RefreshCw } from 'lucide-react';
+import { Send, Loader2, RefreshCw, Inbox } from 'lucide-react';
 
 export default function LiveDemo() {
   const [message, setMessage] = useState("");
