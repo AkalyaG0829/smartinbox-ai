@@ -180,6 +180,7 @@ class MessageRouterRules:
         has_fast_historical_reply = historical_stats.get('has_fast_historical_reply', False)
         is_mentioned = msg.get('is_mentioned', False)
         is_sender_admin = msg.get('is_sender_admin', False)
+        semantic_scores = msg.get('semantic_scores')
 
         # 7. Action Decision Engine
         action_res = ActionPolicyEngine.evaluate_action(
@@ -204,7 +205,8 @@ class MessageRouterRules:
             is_low_urgency=is_low_urgency,
             has_fast_historical_reply=has_fast_historical_reply,
             is_mentioned=is_mentioned,
-            is_sender_admin=is_sender_admin
+            is_sender_admin=is_sender_admin,
+            semantic_scores=semantic_scores
         )
 
         # 8. Confidence Calibrations

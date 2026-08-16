@@ -187,6 +187,11 @@ class MessageRoutingPipeline:
             if ev_field and ev_field != 'none' and isinstance(ev_field, str):
                 evidence_list = ev_field.split(';')
 
+        from src.domain.semantic import SemanticClassifier
+        semantic_classifier = SemanticClassifier(self.embedding_provider)
+        semantic_scores = await semantic_classifier.get_scores(analyzable_text)
+        raw_msg['semantic_scores'] = semantic_scores
+
         decision = MessageRouterRules.classify_and_route(
             raw_msg,
             user_pref,
@@ -347,6 +352,11 @@ class MessageRoutingPipeline:
                                "six digit", "6 digit", "verification pending", "confirm card", "confirm password",
                                "profile will be blocked", "wallet verification failed", "account-login.in", "verify now", "verification code abhi"]
         has_credentials_request = has_word_match(preprocessed_text, credential_keywords)
+        
+        from src.domain.semantic import SemanticClassifier
+        semantic_classifier = SemanticClassifier(self.embedding_provider)
+        semantic_scores = await semantic_classifier.get_scores(preprocessed_text)
+        
         if conv_type in ['personal', 'group'] and has_credentials_request:
             if historical_stats.get('total_count', 0) == 0 or historical_stats.get('reply_rate', 0.0) == 0.0:
                 safety_res = SafetyResult(
@@ -455,7 +465,8 @@ class MessageRoutingPipeline:
             is_low_urgency=is_low_urgency,
             has_fast_historical_reply=has_fast_historical_reply,
             is_mentioned=request.is_mentioned or False,
-            is_sender_admin=request.is_sender_admin or False
+            is_sender_admin=request.is_sender_admin or False,
+            semantic_scores=semantic_scores
         )
 
         is_dnd_muted = is_suppressed_by_dnd or user_pref['group_muted']

@@ -25,7 +25,8 @@ class ActionPolicyEngine:
         is_low_urgency: bool,
         has_fast_historical_reply: bool,
         is_mentioned: bool,
-        is_sender_admin: bool
+        is_sender_admin: bool,
+        semantic_scores: Dict[str, float] = None
     ) -> Dict[str, Any]:
         """
         Action Policy Engine: Evaluates the exact heuristic scoring algorithms from Phase 1
@@ -139,6 +140,19 @@ class ActionPolicyEngine:
                     notify_score += 2.5
                 else:
                     digest_score += 2.0
+
+        # Incorporate Semantic Scores
+        if semantic_scores:
+            for cat, score in semantic_scores.items():
+                if score > 0.45:
+                    if cat == 'notify':
+                        notify_score += 6.0
+                    elif cat == 'important':
+                        important_score += 5.0
+                    elif cat == 'ignore':
+                        ignore_score += 5.0
+                    elif cat == 'digest':
+                        digest_score += 3.0
 
         # Business unverified penalty
         is_unverified_business = conv_type == 'business' and sender_profile.get('verified', 0) == 0
