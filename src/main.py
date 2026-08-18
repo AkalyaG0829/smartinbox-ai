@@ -193,6 +193,38 @@ async def route_message(request: Request, payload: Dict[str, Any], db: Session =
             detail=f"Routing execution failed: {str(e)}"
         )
 
+@app.post("/api/v1/messages/demo", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def route_message_demo(request: Request, payload: Dict[str, Any], db: Session = Depends(get_db)):
+    """
+    Public Live Demo endpoint. Ingests an incoming message and determines the routing action.
+    Strictly rate-limited and requires no master API key.
+    """
+    # Enforce reasonable payload size limits
+    if 'message_text' in payload and len(payload.get('message_text', '')) > 2000:
+        raise HTTPException(status_code=400, detail="Message text too long for demo.")
+
+    if settings.ENABLE_REDACTION and 'message_text' in payload and payload['message_text']:
+        from src.domain.redaction import DataRedactor
+        payload['message_text'] = DataRedactor.redact(payload['message_text'])
+
+    pipeline = MessageRoutingPipeline(
+        db=db,
+        stt_provider=stt_prov,
+        ocr_provider=ocr_prov,
+        embedding_provider=emb_prov,
+        injection_shield=inj_shld
+    )
+
+    try:
+        decision = await pipeline.route_incoming_message(payload)
+        return decision
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Demo routing execution failed: {str(e)}"
+        )
+
 @app.post("/api/v1/messages/process", response_model=MessageProcessingResult, status_code=status.HTTP_200_OK)
 @limiter.limit("100/minute")
 async def process_message(request: Request, request_data: MessageProcessingRequest, db: Session = Depends(get_db), api_key: str = Depends(get_api_key)):

@@ -23,7 +23,6 @@ export default function LiveDemo() {
     
     try {
       const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
-      const apiKey = import.meta.env.VITE_API_KEY || 'your_secure_api_key_here';
       const uniqueId = `web_demo_${Date.now()}`;
       
       const payload = {
@@ -37,11 +36,10 @@ export default function LiveDemo() {
         forwarded_count: 0
       };
 
-      const response = await fetch(`${apiUrl}/api/v1/messages/route`, {
+      const response = await fetch(`${apiUrl}/api/v1/messages/demo`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });

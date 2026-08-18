@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = "local"       # 'cloud' or 'local'
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
-    OPENAI_API_KEY: str = "mock-key"
-    GEMINI_API_KEY: str = "mock-key"
+    OPENAI_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
 
     SEMANTIC_SIMILARITY_THRESHOLD: float = 0.6
     SEMANTIC_LIMIT: int = 3
